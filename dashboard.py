@@ -9,7 +9,13 @@ from streamlit_shap import st_shap
 
 from config import MODELS_DIR, PROCESSED_DATA_DIR, ISSUERS, MOCK_AGENCY_RATINGS_PATH
 
+from main import run_pipeline
+
 st.set_page_config(layout="wide", page_title="CredTech — Explainable Credit Intelligence")
+# 🚀 Always run main.py pipeline first
+with st.spinner("Running pipeline... please wait ⏳"):
+    run_pipeline()
+st.success("Pipeline complete ✅")
 
 @st.cache_data
 def load_features(ticker: str):
