@@ -13,3 +13,4 @@ transformers
 torch
 nltk
 joblib
+matplotlib
