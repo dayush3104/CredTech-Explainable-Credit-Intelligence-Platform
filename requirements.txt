@@ -1,4 +1,4 @@
-
+wbdata
 pandas
 numpy
 yfinance
