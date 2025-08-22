@@ -1,0 +1,15 @@
+
+pandas
+numpy
+yfinance
+requests
+streamlit
+scikit-learn
+lightgbm
+shap
+streamlit-shap
+plotly
+transformers
+torch
+nltk
+joblib
