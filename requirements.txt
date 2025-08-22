@@ -1,4 +1,4 @@
-
+wbdata
 pandas
 numpy
 yfinance
@@ -8,6 +8,7 @@ scikit-learn
 lightgbm
 shap
 streamlit-shap
+matplotlib
 plotly
 transformers
 torch
