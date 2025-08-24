@@ -8,18 +8,28 @@ import shap
 from streamlit_shap import st_shap
 
 from config import MODELS_DIR, PROCESSED_DATA_DIR, ISSUERS, MOCK_AGENCY_RATINGS_PATH
-
 from main import run_pipeline
 
+# --------------------------
+# Streamlit Page Config
+# --------------------------
 st.set_page_config(layout="wide", page_title="CredTech — Explainable Credit Intelligence")
-# 🚀 Always run main.py pipeline first
-with st.spinner("Running pipeline... please wait ⏳"):
-    run_pipeline()
-st.success("Pipeline complete ✅")
 
+# --------------------------
+# Sidebar: Pipeline Controls
+# --------------------------
+st.sidebar.header("Pipeline Controls")
+if st.sidebar.button("Run pipeline now 🚀"):
+    with st.spinner("Running pipeline... please wait ⏳"):
+        run_pipeline()
+    st.success("Pipeline complete ✅ (refresh to see updated data)")
+
+# --------------------------
+# Cached Loaders
+# --------------------------
 @st.cache_data
 def load_features(ticker: str):
-    safe = ticker.replace(".", "_").replace("^","")
+    safe = ticker.replace(".", "_").replace("^", "")
     path = PROCESSED_DATA_DIR / f"features_{safe}.csv"
     if not path.exists():
         return None
@@ -28,7 +38,7 @@ def load_features(ticker: str):
 
 @st.cache_resource
 def load_model_and_shap(ticker: str):
-    safe = ticker.replace(".", "_").replace("^","")
+    safe = ticker.replace(".", "_").replace("^", "")
     model_path = MODELS_DIR / f"model_{safe}.joblib"
     shap_path = MODELS_DIR / f"shap_{safe}.joblib"
     if not (model_path.exists() and shap_path.exists()):
@@ -43,10 +53,10 @@ def load_news():
     if p.exists():
         df = pd.read_csv(p, encoding="utf-8")
 
-        # Normalize column names (lowercase, strip)
+        # Normalize column names
         df = df.rename(columns={c: c.strip().lower() for c in df.columns})
 
-        # Ensure consistent datetime column
+        # Standardize datetime column
         if "date" in df.columns:
             df["publishedAt"] = pd.to_datetime(df["date"], errors="coerce")
         elif "publishedat" in df.columns:
@@ -54,15 +64,13 @@ def load_news():
         else:
             df["publishedAt"] = pd.NaT
 
-        # Ensure required cols
         for col in ["ticker", "title", "source", "sentiment_score"]:
             if col not in df.columns:
                 df[col] = None
 
-        return df[["ticker","publishedAt","title","source","sentiment_score"]]
+        return df[["ticker", "publishedAt", "title", "source", "sentiment_score"]]
 
-    # fallback
-    return pd.DataFrame(columns=["ticker","publishedAt","title","source","sentiment_score"])
+    return pd.DataFrame(columns=["ticker", "publishedAt", "title", "source", "sentiment_score"])
 
 @st.cache_data
 def load_agency_ratings():
@@ -70,6 +78,9 @@ def load_agency_ratings():
         return pd.read_csv(MOCK_AGENCY_RATINGS_PATH, parse_dates=["Date"]).set_index("Date")
     return pd.DataFrame()
 
+# --------------------------
+# Helper
+# --------------------------
 def plain_language_from_shap(shap_row: shap._explanation.Explanation, feature_names: list, k: int = 5):
     vals = np.abs(shap_row.values)
     order = np.argsort(vals)[::-1][:k]
@@ -89,10 +100,15 @@ def plain_language_from_shap(shap_row: shap._explanation.Explanation, feature_na
         bullets.append(f"• {reason} {direction} the score by ~{abs(contrib):.2f} points")
     return bullets
 
-# Sidebar
+# --------------------------
+# Sidebar: Issuer Selector
+# --------------------------
 st.sidebar.header("Analyst Controls")
 ticker = st.sidebar.selectbox("Select Issuer", options=list(ISSUERS.keys()), format_func=lambda x: f"{x} — {ISSUERS[x]}")
 
+# --------------------------
+# Load Artifacts
+# --------------------------
 df = load_features(ticker)
 model, shap_bundle = load_model_and_shap(ticker)
 news_df = load_news()
@@ -102,15 +118,17 @@ st.title("CredTech — Real-Time, Explainable Credit Intelligence")
 st.caption("Dynamic scores, feature-level explanations, and event-aware insights.")
 
 if df is None or model is None or shap_bundle is None:
-    st.error("Artifacts missing. Please run the pipeline first: python main.py then reload this app.")
+    st.error("Artifacts missing. Please run the pipeline locally (python main.py) or via the sidebar button, then refresh the app.")
     st.stop()
 
-# Alerts (bonus)
+# --------------------------
+# Sidebar Alerts
+# --------------------------
 st.sidebar.subheader("⚠ Sudden Score Change Alerts")
 alerts = []
 for t in ISSUERS.keys():
     d = load_features(t)
-    if d is None or len(d) < 2: 
+    if d is None or len(d) < 2:
         continue
     change = d["credit_score"].iloc[-1] - d["credit_score"].iloc[-2]
     if abs(change) >= 3.0:
@@ -121,10 +139,12 @@ if alerts:
 else:
     st.sidebar.write("No large changes in last update.")
 
+# --------------------------
 # Tabs
-# Tabs
+# --------------------------
 tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Score Deconstruction", "Issuer Comparison", "Data Explorer"])
 
+# --- Overview ---
 with tab1:
     st.subheader(f"Overview — {ISSUERS[ticker]} ({ticker})")
 
@@ -158,6 +178,7 @@ with tab1:
     else:
         st.info("No recent news found.")
 
+# --- Score Deconstruction ---
 with tab2:
     st.subheader("Score Deconstruction")
     st.caption("Understand how each feature contributed to the selected day's score.")
@@ -179,12 +200,12 @@ with tab2:
     st.markdown("*Global importance (beeswarm)*")
     st_shap(shap.plots.beeswarm(shap_values), height=380)
 
-with tab3:  # Issuer Comparison
+# --- Issuer Comparison ---
+with tab3:
     st.subheader("Issuer Comparison")
     picks = st.multiselect("Select issuers", options=list(ISSUERS.keys()),
                            default=list(ISSUERS.keys()))
 
-    # Load features for each selected issuer
     series = {}
     for t in picks:
         d = load_features(t)
@@ -194,14 +215,12 @@ with tab3:  # Issuer Comparison
     if not series:
         st.info("Run the pipeline first to compare issuers.")
     else:
-        # Overlay chart
         fig = go.Figure()
         for t, s in series.items():
             fig.add_trace(go.Scatter(x=s.index, y=s, mode="lines", name=f"{t}"))
         fig.update_layout(height=420, xaxis_title="Date", yaxis_title="Score", legend=dict(orientation="h"))
         st.plotly_chart(fig, use_container_width=True)
 
-        # Correlation of daily changes
         df_cmp = pd.DataFrame(series)
         dchg = df_cmp.diff().dropna()
         if not dchg.empty:
@@ -210,10 +229,10 @@ with tab3:  # Issuer Comparison
             heat = px.imshow(corr, text_auto=True, aspect="auto", title="Correlation of daily score changes")
             st.plotly_chart(heat, use_container_width=True)
 
-        # Latest snapshot
         latest = {t: float(s.dropna().iloc[-1]) for t, s in series.items() if len(s.dropna())}
         st.write(pd.DataFrame.from_dict(latest, orient="index", columns=["Latest score"]).sort_values("Latest score", ascending=False))
 
+# --- Data Explorer ---
 with tab4:
     st.subheader("Data Explorer")
     cols = [c for c in df.columns if c != "credit_score"]
